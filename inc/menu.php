@@ -22,6 +22,30 @@ function africastalking_transactions_menu()
 
     add_submenu_page(
         'edit.php?post_type=at_ipn',
+        'Send SMS',
+        '> Send SMS',
+        'manage_options',
+        'edit.php?post_type=at_ipn&page=at_settings&tab=sms'
+    );
+
+    add_submenu_page(
+        'edit.php?post_type=at_ipn',
+        'B2C Payment',
+        '> B2C Payment',
+        'manage_options',
+        'edit.php?post_type=at_ipn&page=at_settings&tab=b2c'
+    );
+
+    add_submenu_page(
+        'edit.php?post_type=at_ipn',
+        'Buy Airtime',
+        '> Buy Airtime',
+        'manage_options',
+        'edit.php?post_type=at_ipn&page=at_settings&tab=airtime'
+    );
+
+    add_submenu_page(
+        'edit.php?post_type=at_ipn',
         'Africa\'s Talking Configuration',
         'Configuration',
         'manage_options',
@@ -268,7 +292,7 @@ function at_apis_render_page()
 
         } ?>
 
-        <h3><?php _e('Buy airtime', 'woocommerce');?></h3>
+        <h3><?php _e('Buy airtime for one or more phone numbers.', 'woocommerce');?></h3>
         <form method="post" action="">
             <table class="form-table">
                 <tr valign="top">
