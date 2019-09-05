@@ -31,6 +31,8 @@ if (!defined('AT_PLUGIN_FILE')) {
     define('AT_PLUGIN_FILE', __FILE__);
 }
 
+require_once plugin_dir_path(__FILE__).'vendor/autoload.php';
+
 // Deactivate plugin if WooCommerce is not active
 register_activation_hook(__FILE__, 'wc_africastalking_activation_check');
 function wc_africastalking_activation_check()
@@ -191,28 +193,17 @@ function africastalking_init()
                     'desc_tip' => __('Payment title of checkout process.', 'woocommerce'),
                     'default'  => __('Lipa Na M-PESA', 'woocommerce'),
                 ),
-                'env'                => array(
-                    'title'       => __('Environment', 'woocommerce'),
-                    'type'        => 'select',
-                    'options'     => array(
-                        'sandbox' => __('Sandbox', 'woocommerce'),
-                        'live'    => __('Live', 'woocommerce'),
-                    ),
-                    'description' => __('M-PESA Environment', 'woocommerce'),
-                    'default'     => 'sandbox',
-                    'desc_tip'    => true,
-                ),
                 'shortcode'          => array(
                     'title'    => __('AT Shortcode', 'woocommerce'),
                     'type'     => 'text',
                     'desc_tip' => __('This is the Till number provided by Africas Talking when you signed up for an account.', 'woocommerce'),
                     'default'  => '',
                 ),
-                'username'             => array(
+                'username'           => array(
                     'title'       => __('AT Username', 'woocommerce'),
                     'type'        => 'text',
                     'description' => __('Your App Consumer Secret From Safaricom Daraja.', 'woocommerce'),
-                    'default'     => __('bclwIPkcRqw61yUt', 'woocommerce'),
+                    'default'     => __('sandbox', 'woocommerce'),
                     'desc_tip'    => true,
                 ),
                 'key'                => array(
@@ -254,61 +245,92 @@ function africastalking_init()
         // Response handled for payment gateway
         public function process_payment($order_id)
         {
+            $username = $this->get_option('username');
+            $apiKey   = $this->get_option('key');
+            $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+
             $currency = get_woocommerce_currency_symbol();
-            $order    = wc_get_order($order_id);
-            $order->update_status('pending', __('Waiting to verify M-PESA payment.', 'woocommerce'));
-            $order->reduce_order_stock();
-            WC()->cart->empty_cart();
-            $order->add_order_note("Awaiting payment confirmation from Africas Talking");
-            // Insert the payment into the database
+            $order = new WC_Order($order_id);
 
-            $post_id = at_post_id_by_meta_key_and_value('_reference', trim($_POST['reference']));
-
-            if (!$post_id) {
-                $post_id = wp_insert_post(
-                    array(
-                        'post_title'  => 'Order ' . time(),
-                        'post_status' => 'publish',
-                        'post_type'   => 'africastalking_ipn',
-                        'post_author' => is_user_logged_in() ? get_current_user_id() : 1,
-                    )
-                );
-
-                update_post_meta($post_id, '_order_id', $order_id);
-                update_post_meta($post_id, '_transaction', $order_id);
-                update_post_meta($post_id, '_reference', strip_tags(trim($_POST['reference'])));
-                update_post_meta($order_id, '_mpesa_reference', strip_tags(trim($_POST['reference'])));
-                update_post_meta($post_id, '_amount', round($amount));
-                update_post_meta($post_id, '_order_status', 'on-hold');
-            } else {
-                update_post_meta($post_id, '_order_id', $order_id);
-                $amount                = get_post_meta($post_id, '_amount', true);
-                $transaction_reference = get_post_meta($post_id, '_reference', true);
-                if ((int) $amount >= $order->get_total()) {
-                    $order->add_order_note(__("FULLY PAID: Payment of $currency $amount from " . strip_tags(trim($_POST['phone'])) . " and MPESA reference $transaction_reference confirmed by Africas Talking", 'woocommerce'));
-                    // $order->payment_complete();
-                    $order->update_status('completed');
-                } else {
-                    $order->add_order_note(__("PARTLY PAID: Received $currency $amount from " . strip_tags(trim($_POST['phone'])) . " and MPESA reference $transaction_reference", 'woocommerce'));
-                    $order->update_status('processing');
-                }
-            }
-
-            return array(
-                'result'   => 'success',
-                'redirect' => $this->get_return_url($order),
+            $total      = $order->get_total();
+            $phone      = $order->get_billing_phone();
+            $first_name = $order->get_billing_first_name();
+            $last_name  = $order->get_billing_last_name();
+            $reference  = 'ORDER#' . $order_id;
+            
+            $payments = $AT->payments();
+            $result = $payments->mobileCheckout(
+                array(
+                    "productName"  => $reference,
+                    "phoneNumber"  => $phone,
+                    "currencyCode" => $currency,
+                    "amount"       => round($total),
+                )
             );
-        }
 
-        // Validate OTP
-        public function validate_fields()
-        {
-            if (empty($_POST['reference'])) {
-                wc_add_notice('Confirmation Code is required!', 'error');
-                return false;
+            if ($result) {
+                if ($result['status'] == 'error') {
+                    $error_message = 'M-PESA Error ' . $result['data'] . ': ' . $result['data'];
+                    $order->update_status('failed', __($error_message, 'woocommerce'));
+                    wc_add_notice(__('Failed! ', 'woocommerce') . $error_message, 'error');
+                    return array(
+                        'result'   => 'fail',
+                        'redirect' => '',
+                    );
+                } else {
+                    /**
+                     * Temporarily set status as "on-hold", incase the M-PESA API times out before processing our request
+                     */
+                    $order->update_status('on-hold', __('Awaiting M-PESA confirmation of payment from ' . $phone . '.', 'woocommerce'));
+
+                    /**
+                     * Reduce stock levels
+                     */
+                    wc_reduce_stock_levels($order_id);
+
+                    /**
+                     * Remove contents from cart
+                     */
+                    WC()->cart->empty_cart();
+
+                    // Insert the payment into the database
+                    $post_id = wp_insert_post(
+                        array(
+                            'post_title'   => 'Mobile Checkout',
+                            'post_content' => "Response: " . json_encode($result),
+                            'post_status'  => 'publish',
+                            'post_type'    => 'at_ipn',
+                            'post_author'  => is_user_logged_in() ? get_current_user_id() : $this->get_option('accountant'),
+                        )
+                    );
+
+                    update_post_meta($post_id, '_customer', "{$first_name} {$last_name}");
+                    update_post_meta($post_id, '_phone', $phone);
+                    update_post_meta($post_id, '_order_id', $order_id);
+                    update_post_meta($post_id, '_amount', $total);
+                    update_post_meta($post_id, '_reference', $reference);
+                    update_post_meta($post_id, '_receipt', 'N/A');
+                    update_post_meta($post_id, '_order_status', 'on-hold');
+
+                    $this->instructions .= '<p>Awaiting M-PESA confirmation of payment from ' . $phone . ' for request ' . $request_id . '. Check your phone for the STK Prompt.</p>';
+
+                    // Return thankyou redirect
+                    return array(
+                        'result'   => 'success',
+                        'redirect' => $this->get_return_url($order),
+                    );
+                }
+            } else {
+                $error_message = __('Could not connect to Daraja', 'woocommerce');
+
+                $order->update_status('failed', $error_message);
+                wc_add_notice(__('Failed! ', 'woocommerce') . $error_message, 'error');
+
+                return array(
+                    'result'   => 'fail',
+                    'redirect' => '',
+                );
             }
-
-            return true;
         }
 
         /**

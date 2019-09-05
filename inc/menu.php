@@ -6,7 +6,6 @@
  * @since 0.18.01
  */
 require_once plugin_dir_path(__DIR__).'vendor/autoload.php';
-use AfricasTalking\SDK\AfricasTalking;
 
 // Add admin menus for plugin actions
 add_action('admin_menu', 'africastalking_transactions_menu');
@@ -47,56 +46,58 @@ function africastalking_transactions_menu_pref()
 
 // Redirect to plugin configuration page
 function at_admin_settings_page()
-{
-    ?>
+{ ?>
     <div class="wrap">
         <h1><?php _e('Africas Talking APIs', 'woocommerce');?></h1><?php
-global $at_active_tab;
-    $at_active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'welcome';?>
+        global $at_active_tab;
+        $at_active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'apis'; ?>
 
-        <h2 class="nav-tab-wrapper">
-        <?php do_action('at_settings_tab');?>
-        </h2>
+        <h2 class="nav-tab-wrapper"><?php do_action('at_settings_tab');?></h2>
         <?php do_action('at_settings_content');?>
     </div><?php
 }
 
-add_action('at_settings_tab', 'at_welcome_tab', 1);
-function at_welcome_tab()
+add_action('at_settings_tab', 'at_apis_tab', 1);
+function at_apis_tab()
 {
-    global $at_active_tab;?>
-	<a class="nav-tab <?php echo $at_active_tab == 'welcome' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_settings&tab=welcome'); ?>"><?php _e('Welcome', 'woocommerce');?> </a>
+    global $at_active_tab; ?>
+	<a class="nav-tab <?php echo $at_active_tab == 'apis' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_settings&tab=apis'); ?>"><?php _e('Welcome', 'woocommerce');?> </a>
     <a class="nav-tab <?php echo $at_active_tab == 'sms' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_settings&tab=sms'); ?>"><?php _e('Send SMS', 'woocommerce');?> </a>
     <a class="nav-tab <?php echo $at_active_tab == 'b2c' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_settings&tab=b2c'); ?>"><?php _e('B2C Payment', 'woocommerce');?> </a>
 	<a class="nav-tab <?php echo $at_active_tab == 'airtime' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_settings&tab=airtime'); ?>"><?php _e('Buy Airtime', 'woocommerce');?> </a>
 	<?php
 }
 
-add_action('at_settings_content', 'at_welcome_render_page');
-function at_welcome_render_page()
+add_action('at_settings_content', 'at_apis_render_page');
+function at_apis_render_page()
 {
+    $username = at_option('username');
+    $apiKey   = at_option('key');
+    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+    
     global $at_active_tab;
-    if ('' || 'welcome' == $at_active_tab) { ?>
-
-	<h3><?php _e('Welcome', 'woocommerce');?></h3>
-    <p>Explore the AT APIs available for use, for your convenience.</p>
-	<!-- Put your content here -->
-	<?php } elseif ('' || 'sms' == $at_active_tab) {
-
+    if ('' || 'apis' == $at_active_tab) { ?>
+        <h3><?php _e('Welcome', 'woocommerce');?></h3>
+        <p>Explore the AT APIs available for use, for your convenience.</p>
+        <!-- Put your content here --><?php 
+    } elseif ('' || 'sms' == $at_active_tab) {
         if (isset($_POST['sms_phone'])) {
-            $username = at_option('username');
-            $apiKey   = at_option('key');
-            $AT       = new AfricasTalking($username, $apiKey);
-            $sms      = $AT->sms();
-
+            $sms        = $AT->sms();
             $recipients = strip_tags(trim($_POST['sms_phone']));
             $message    = strip_tags(trim($_POST['sms_message']));
-            $from       = "myShortCode";
+            $from       = "AT2FA";
+
+            $phones     = array();
+            if (strpos(',', $recipients) !== false) {
+                $phones = explode(',', $recipients);
+            } else {
+                $phones = $recipients;
+            }
 
             try {
                 // Thats it, hit send and we'll take care of the rest
                 $result = $sms->send([
-                    'to'      => $recipients,
+                    'to'      => $phones,
                     'message' => $message,
                     'from'    => $from,
                 ]);
@@ -114,47 +115,73 @@ function at_welcome_render_page()
 
         <h3><?php _e('Send SMS', 'woocommerce');?></h3>
         <form method="post" action="">
-                <table class="form-table">
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Phone number</label>
-                        </th>
-                        <td>
-                            <input class="regular-text" type="tel" id="at_shortcode" name="sms_phone" value="+254"/>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Your message</label>
-                        </th>
-                        <td>
-                            <textarea class="regular-text" id="at_shortcode" name="sms_message" placeholder="Your message"></textarea>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                </table>
-                <?php submit_button('Send message');?>
-            </form>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Phone number(s)</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="tel" id="at_shortcode" name="sms_phone" value="+254"/>
+                        <br><small>Separate multiple phone numbers with comma</small>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Your message</label>
+                    </th>
+                    <td>
+                        <textarea class="regular-text" id="at_shortcode" name="sms_message" placeholder="Your message"></textarea>
+                    </td>
+                </tr>
+                <tr valign="top">
+            </table>
+            <?php submit_button('Send message');?>
+        </form>
         <?php
     } elseif ('' || 'b2c' == $at_active_tab) {
+        if (isset($_POST['b2c_phone'])) {
+            $payments   = $AT->payments();
 
-        if (isset($_POST['sms_phone'])) {
-            $username = at_option('username');
-            $apiKey   = at_option('key');
-            $AT       = new AfricasTalking($username, $apiKey);
-            $sms      = $AT->sms();
+            $recipients = strip_tags(trim($_POST['b2c_phone']));
+            $currency   = strip_tags(trim($_POST['b2c_currency']));
+            $amount     = strip_tags(trim($_POST['b2c_amount']));
+            $product    = strip_tags(trim($_POST['b2c_product']));
 
-            $recipients = strip_tags(trim($_POST['sms_phone']));
-            $message    = strip_tags(trim($_POST['sms_message']));
-            $from       = "myShortCode";
+            $phones     = array();
+            if (strpos(',', $recipients) !== false) {
+                $numbers = explode(',', $recipients);
+
+                foreach ($numbers as $number) {
+                    $phones[] = array(
+                        "phoneNumber"   => $number,
+                        "currencyCode"  => $currency,
+                        "amount"        => round($amount),
+                        "name"          => $number,
+                        "metadata"      => array(
+                            "nothing"   => "no data"
+                        )
+                    );
+                }
+            } else {
+                $phones[] = array(
+                    "phoneNumber"   => $recipients,
+                    "currencyCode"  => $currency,
+                    "amount"        => round($amount),
+                    "name"          => $recipients,
+                    "metadata"      => array(
+                        "nothing"   => "no data"
+                    )
+                );
+            }
 
             try {
                 // Thats it, hit send and we'll take care of the rest
-                $result = $sms->send([
-                    'to'      => $recipients,
-                    'message' => $message,
-                    'from'    => $from,
-                ]);
+                $result = $payments->mobileB2C(
+                    array(
+                        "productName" => $product,
+                        "recipients" => $recipients,
+                    )
+                );
 
                 echo '<div class="notice notice-'.$result['status'].' is-dismissible">
                     <p>'.ucfirst($result['data']).'.</p>
@@ -165,51 +192,70 @@ function at_welcome_render_page()
                 </div>';
             }
 
-        }?>
+        } ?>
 
         <h3><?php _e('Send to phone', 'woocommerce');?></h3>
         <form method="post" action="">
-                <table class="form-table">
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Phone number</label>
-                        </th>
-                        <td>
-                            <input class="regular-text" type="tel" id="at_shortcode" name="b2c_phone" value="+254"/>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Amount to send</label>
-                        </th>
-                        <td>
-                            <input class="regular-text" type="number" id="at_shortcode" name="b2c_amount" value="100"/>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                </table>
-                <?php submit_button('Send now');?>
-            </form>
-        <?php
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Phone number(s)</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="tel" id="at_shortcode" name="b2c_phone" value="+254"/>
+                        <br><small>Separate multiple phone numbers with comma</small>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Amount to send</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="number" id="at_shortcode" name="b2c_amount" value="100"/>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Product/Description</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="text" id="b2c_product" name="b2c_product">
+                        <input class="regular-text" type="hidden" name="b2c_currency" value="KSH"/>
+                    </td>
+                </tr>
+                <tr valign="top">
+            </table>
+            <?php submit_button('Send now');?>
+        </form><?php
     } elseif ('' || 'airtime' == $at_active_tab) {
+        if (isset($_POST['airtime_phone'])) {
+            $airtime      = $AT->airtime();
 
-        if (isset($_POST['sms_phone'])) {
-            $username = at_option('username');
-            $apiKey   = at_option('key');
-            $AT       = new AfricasTalking($username, $apiKey);
-            $sms      = $AT->sms();
+            $recipients = strip_tags(trim($_POST['airtime_phone']));
+            $amount     = strip_tags(trim($_POST['airtime_amount']));
 
-            $recipients = strip_tags(trim($_POST['sms_phone']));
-            $message    = strip_tags(trim($_POST['sms_message']));
-            $from       = "myShortCode";
+            $phones     = array();
+            if (strpos(',', $recipients) !== false) {
+                $numbers = explode(',', $recipients);
+
+                foreach ($numbers as $number) {
+                    $phones[] = array(
+                        "phoneNumber"   => $number,
+                        "amount"        => round($amount)
+                    );
+                }
+            } else {
+                $phones[] = array(
+                    "phoneNumber"   => $recipients,
+                    "amount"        => round($amount)
+                );
+            }
 
             try {
                 // Thats it, hit send and we'll take care of the rest
-                $result = $sms->send([
-                    'to'      => $recipients,
-                    'message' => $message,
-                    'from'    => $from,
-                ]);
+                $result =  $airtime->send(array(
+                    "recipients" => $phones
+                ));
 
                 echo '<div class="notice notice-'.$result['status'].' is-dismissible">
                     <p>'.ucfirst($result['data']).'.</p>
@@ -220,32 +266,32 @@ function at_welcome_render_page()
                 </div>';
             }
 
-        }?>
+        } ?>
 
         <h3><?php _e('Buy airtime', 'woocommerce');?></h3>
         <form method="post" action="">
-                <table class="form-table">
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Phone number</label>
-                        </th>
-                        <td>
-                            <input class="regular-text" type="tel" id="at_shortcode" name="sms_phone" value="+254"/>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">
-                            <label for="at_shortcode">Amount to buy</label>
-                        </th>
-                        <td>
-                            <input class="regular-text" type="number" id="at_shortcode" name="sms_amount" value="100"/>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                </table>
-                <?php submit_button('Buy now');?>
-            </form>
-        <?php
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Phone number(s)</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="tel" id="at_shortcode" name="airtime_phone" value="+254"/>
+                        <br><small>Separate multiple phone numbers with comma</small>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Amount to buy</label>
+                    </th>
+                    <td>
+                        <input class="regular-text" type="number" id="at_shortcode" name="airtime_amount" value="100"/>
+                    </td>
+                </tr>
+                <tr valign="top">
+            </table>
+            <?php submit_button('Buy now');?>
+        </form><?php
     }
 }
 
@@ -260,8 +306,7 @@ function at_register_settings()
 add_action('admin_init', 'at_register_settings');
 
 function at_options_page()
-{
-    ?>
+{ ?>
     <div>
         <h2>Africas Talking Configuration</h2>
         <form method="post" action="options.php">
