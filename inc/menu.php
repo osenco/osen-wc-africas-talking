@@ -1,8 +1,8 @@
 <?php
 /**
- * @package Africas Talking For WooCommerce
+ * @package Africas Talking For WordPress
  * @subpackage Plugin Menus
- * @author Mauko Maunde < hi@mauko.co.ke >
+ * @author Osen Concepts < hi@osen.co.ke >
  * @since 0.18.01
  */
 require_once plugin_dir_path(__DIR__).'vendor/autoload.php';
@@ -40,8 +40,18 @@ function africastalking_transactions_menu()
         'edit.php?post_type=at_ipn',
         'Buy Airtime',
         '> Buy Airtime',
+        
         'manage_options',
         'edit.php?post_type=at_ipn&page=at_settings&tab=airtime'
+    );
+
+    add_submenu_page(
+        'edit.php?post_type=at_ipn',
+        'Callback URLs',
+        'Callback URLs',
+        'manage_options',
+        'at_callbacks',
+        'at_admin_cb_page'
     );
 
     add_submenu_page(
@@ -64,7 +74,7 @@ function africastalking_transactions_menu_pref()
             )
         );
     } else {
-        at_options_page();
+        at_mpesa_options_page_html();
     }
 }
 
@@ -72,12 +82,13 @@ function africastalking_transactions_menu_pref()
 function at_admin_settings_page()
 { ?>
     <div class="wrap">
-        <h1><?php _e('Africas Talking APIs', 'woocommerce');?></h1><?php
+        <h1><?php echo esc_html( get_admin_page_title() ); ?></h1><?php
         global $at_active_tab;
         $at_active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'apis'; ?>
 
         <h2 class="nav-tab-wrapper"><?php do_action('at_settings_tab');?></h2>
         <?php do_action('at_settings_content');?>
+        <h3>Wallet Balance: KSH <?php echo at_wallet_balance(); ?></h3>
     </div><?php
 }
 
@@ -104,7 +115,7 @@ function at_apis_render_page()
         <h3><?php _e('Welcome', 'woocommerce');?></h3>
         <p>Explore the AT APIs available for use, for your convenience.</p>
         <!-- Put your content here --><?php 
-    } elseif ('' || 'sms' == $at_active_tab) {
+    } elseif ('sms' == $at_active_tab) {
         if (isset($_POST['sms_phone'])) {
             $sms        = $AT->sms();
             $recipients = strip_tags(trim($_POST['sms_phone']));
@@ -127,7 +138,7 @@ function at_apis_render_page()
                 ]);
 
                 echo '<div class="notice notice-'.$result['status'].' is-dismissible">
-                    <p>'.ucfirst($result['data']).'.</p>
+                    <p>'.json_encode($result['data']).'.</p>
                 </div>';
             } catch (Exception $e) {
                 echo '<div class="notice notice-error is-dismissible">
@@ -162,7 +173,7 @@ function at_apis_render_page()
             <?php submit_button('Send message');?>
         </form>
         <?php
-    } elseif ('' || 'b2c' == $at_active_tab) {
+    } elseif ('b2c' == $at_active_tab) {
         if (isset($_POST['b2c_phone'])) {
             $payments   = $AT->payments();
 
@@ -244,18 +255,19 @@ function at_apis_render_page()
                     </th>
                     <td>
                         <input class="regular-text" type="text" id="b2c_product" name="b2c_product">
-                        <input class="regular-text" type="hidden" name="b2c_currency" value="KSH"/>
+                        <input class="regular-text" type="hidden" name="b2c_currency" value="KSH">
                     </td>
                 </tr>
                 <tr valign="top">
             </table>
             <?php submit_button('Send now');?>
         </form><?php
-    } elseif ('' || 'airtime' == $at_active_tab) {
+    } elseif ('airtime' == $at_active_tab) {
         if (isset($_POST['airtime_phone'])) {
             $airtime      = $AT->airtime();
 
             $recipients = strip_tags(trim($_POST['airtime_phone']));
+            $currency   = strip_tags(trim($_POST['airtime_currency']));
             $amount     = strip_tags(trim($_POST['airtime_amount']));
 
             $phones     = array();
@@ -265,12 +277,15 @@ function at_apis_render_page()
                 foreach ($numbers as $number) {
                     $phones[] = array(
                         "phoneNumber"   => $number,
+                        "currencyCode"  => $currency,
                         "amount"        => round($amount)
                     );
                 }
+
             } else {
                 $phones[] = array(
                     "phoneNumber"   => $recipients,
+                    "currencyCode"  => $currency,
                     "amount"        => round($amount)
                 );
             }
@@ -310,6 +325,7 @@ function at_apis_render_page()
                     </th>
                     <td>
                         <input class="regular-text" type="number" id="at_shortcode" name="airtime_amount" value="100"/>
+                        <input class="regular-text" type="hidden" name="airtime_currency" value="KSH">
                     </td>
                 </tr>
                 <tr valign="top">
@@ -319,50 +335,106 @@ function at_apis_render_page()
     }
 }
 
-function at_register_settings()
-{
-    add_option('at_shortcode', '744312');
-    register_setting('at_options_group', 'at_shortcode', 'at_callback');
 
-    add_option('at_api_key', 'CANN4N9UGFHH1E7CX41T');
-    register_setting('at_options_group', 'at_api_key', 'at_callback');
-}
-add_action('admin_init', 'at_register_settings');
 
-function at_options_page()
+// Redirect to plugin configuration page
+function at_admin_cb_page()
 { ?>
-    <div>
-        <h2>Africas Talking Configuration</h2>
-        <form method="post" action="options.php">
-            <?php settings_fields('at_options_group');?>
+    <div class="wrap">
+        <h1><?php echo esc_html( get_admin_page_title() ); ?></h1><?php
+        global $at_active_tab;
+        $at_active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'apis'; ?>
+
+        <h2 class="nav-tab-wrapper"><?php do_action('at_callbacks_tab');?></h2>
+        <?php do_action('at_callbacks_content');?>
+    </div><?php
+}
+
+add_action('at_callbacks_tab', 'at_apis_cb_tab', 1);
+function at_apis_cb_tab()
+{
+    global $at_active_tab; ?>
+	<a class="nav-tab <?php echo $at_active_tab == 'apis' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_callbacks&tab=apis'); ?>"><?php _e('Welcome', 'woocommerce');?> </a>
+    <a class="nav-tab <?php echo $at_active_tab == 'sms' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_callbacks&tab=sms'); ?>"><?php _e('SMS', 'woocommerce');?> </a>
+    <a class="nav-tab <?php echo $at_active_tab == 'b2c' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_callbacks&tab=b2c'); ?>"><?php _e('B2C', 'woocommerce');?> </a>
+	<a class="nav-tab <?php echo $at_active_tab == 'airtime' || '' ? 'nav-tab-active' : ''; ?>" href="<?php echo admin_url('edit.php?post_type=at_ipn&page=at_callbacks&tab=airtime'); ?>"><?php _e('Airtime', 'woocommerce');?> </a>
+	<?php
+}
+
+add_action('at_callbacks_content', 'at_apis_cb_render_page');
+function at_apis_cb_render_page()
+{
+    $username = at_option('username');
+    $apiKey   = at_option('key');
+    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+    
+    global $at_active_tab;
+    if ('' || 'apis' == $at_active_tab) { ?>
+        <h3><?php _e('Welcome', 'woocommerce');?></h3>
+        <p>Explore the AT APIs available for use, for your convenience.</p>
+        <!-- Put your content here --><?php 
+    } elseif ('sms' == $at_active_tab) { ?>
+        <h3><?php _e('SMS Callback URLs', 'woocommerce');?></h3>
             <table class="form-table">
                 <tr valign="top">
                     <th scope="row">
-                        <label for="at_shortcode">AT Shortcode</label>
+                        <label for="at_shortcode">Status Callback</label>
                     </th>
                     <td>
-                        <input class="regular-text" type="text" id="at_shortcode" name="at_api_shortcode" value="<?php echo get_option('at_api_shortcode'); ?>" />
+                        <code><?php echo home_url('africastalking/sms/?action=status'); ?></code>
                     </td>
                 </tr>
                 <tr valign="top">
                     <th scope="row">
-                        <label for="at_shortcode">API Username</label>
+                        <label for="at_shortcode">Validation Callback</label>
                     </th>
                     <td>
-                        <input class="regular-text" type="text" id="at_shortcode" name="at_api_username" value="<?php echo get_option('at_api_username'); ?>" />
-                    </td>
-                </tr>
-                <tr valign="top">
-                    <th scope="row">
-                        <label for="at_shortcode">API Key</label>
-                    </th>
-                    <td>
-                        <input class="regular-text" type="text" id="at_shortcode" name="at_api_key" value="<?php echo get_option('at_api_key'); ?>" />
+                        <code><?php echo home_url('africastalking/sms/?action=validate'); ?></code>
                     </td>
                 </tr>
             </table>
-            <?php submit_button('Save Configuration');?>
-        </form>
-    </div>
-    <?php
-}?>
+        <?php
+    } elseif ('b2c' == $at_active_tab) { ?>
+        <h3><?php _e('B2C Callback URLs', 'woocommerce');?></h3>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Status Callback</label>
+                    </th>
+                    <td>
+                        <code><?php echo home_url('africastalking/b2c/?action=status'); ?></code>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Validation Callback</label>
+                    </th>
+                    <td>
+                        <code><?php echo home_url('africastalking/b2c/?action=validate'); ?></code>
+                    </td>
+                </tr>
+            </table>
+        <?php
+    } elseif ('airtime' == $at_active_tab) { ?>
+        <h3><?php _e('Airtime Callback URLs', 'woocommerce');?></h3>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Status Callback</label>
+                    </th>
+                    <td>
+                        <code><?php echo home_url('africastalking/airtime/?action=status'); ?></code>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">
+                        <label for="at_shortcode">Validation Callback</label>
+                    </th>
+                    <td>
+                        <code><?php echo home_url('africastalking/airtime/?action=validate'); ?></code>
+                    </td>
+                </tr>
+            </table>
+        <?php
+    }
+}

@@ -1,178 +1,133 @@
 <?php
-add_action('init', function () {
-    add_rewrite_rule('at_reconcile', 'index.php?at_reconcile=1', 'top');
-});
+add_action('init', 'at_rewrite_add_rewrites');
+function at_rewrite_add_rewrites()
+{
+    add_rewrite_rule('africastalking/([^/]*)/?', 'index.php?africastalking=$matches[1]', 'top');
+}
 
-add_filter('query_vars', function ($query_vars) {
-    $query_vars[] = 'at_reconcile';
-    return $query_vars;
-});
+add_filter('query_vars', 'at_rewrite_add_var');
+function at_rewrite_add_var($vars)
+{
+    $vars[] = 'africastalking';
+    return $vars;
+}
 
-/**
- * Create a Base64 encoded signature using API_KEY as the secret key
- * The signature is a Base64 encoded HMAC(Hash Message Authentication Code)
- */
-add_action('template_redirect', function () {
-    if (get_query_var('at_reconcile')) {
+add_action('template_redirect', 'at_process_ipn');
+function at_process_ipn()
+{
+    if (get_query_var('africastalking')) {
         header("Access-Control-Allow-Origin: *");
         header("Content-Type: Application/json");
 
-        $africastalking_gateway = new WC_Kopoati_Gateway();
-        $shortcode        = $africastalking_gateway->get_option('shortcode');
-        $api_key          = $africastalking_gateway->get_option('api_key');
+        $api = get_query_var('africastalking', 'something_ominous');
+        $action = $_GET['action'];
 
-        // Get all the fields from the post request
-        $input                   = file_get_contents('php://input');
-        $data                    = json_decode($input, true);
-        $data                    = !is_array($data) ? array() : $data;
-        $service_name            = $data['service_name'];
-        $business_number         = $data['business_number'];
-        $transaction_reference   = $data['transaction_reference'];
-        $internal_transaction_id = $data['internal_transaction_id'];
-        $transaction_timestamp   = $data['transaction_timestamp'];
-        $transaction_type        = $data['transaction_type'];
-        $amount                  = $data['amount'];
-        $amount                  = round($amount);
-        $first_name              = $data['first_name'];
-        $last_name               = $data['last_name'];
-        $middle_name             = $data['middle_name'];
-        $sender_phone            = $data['sender_phone'];
-        $currency                = $data['currency'];
-        $account_number          = $data['account_number'];
+        switch ($action) {
+            case "confirm":
+                $response = json_decode(file_get_contents('php://input'), true);
 
-        $signature = isset($data['signature']) ? $data['signature'] : '';
-        unset($data['signature']);
-        ksort($data);
+                if (!$response || empty($response)) {
+                    exit(
+                        wp_send_json(
+                            array(
+                                'ResultCode' => 1,
+                                'ResultDesc' => 'No response data received',
+                            )
+                        )
+                    );
+                }
 
-        $b = array();
-        foreach ($data as $key => $value) {
-            $b[] = $key . '=' . $value;
+                $TransactionType    = $response['TransactionType'];
+                $mpesaReceiptNumber = $response['TransID'];
+                $transactionDate    = $response['TransTime'];
+                $amount             = $response['TransAmount'];
+                $BusinessShortCode  = $response['BusinessShortCode'];
+                $BillRefNumber      = $response['BillRefNumber'];
+                $InvoiceNumber      = $response['InvoiceNumber'];
+                $OrgAccountBalance  = $response['OrgAccountBalance'];
+                $ThirdPartyTransID  = $response['ThirdPartyTransID'];
+                $phone              = $response['MSISDN'];
+                $FirstName          = $response['FirstName'];
+                $MiddleName         = $response['MiddleName'];
+                $LastName           = $response['LastName'];
+
+                $post = at_post_id_by_meta_key_and_value('_reference', $BillRefNumber);
+                if ($post !== false) {
+                    wp_update_post(
+                        array(
+                            'post_content' => file_get_contents('php://input'), 'ID' => $post,
+                        )
+                    );
+                } else {
+                    $post_id = wp_insert_post(
+                        array(
+                            'post_title'   => 'C2B',
+                            'post_content' => "Response: " . json_encode($response),
+                            'post_status'  => 'publish',
+                            'post_type'    => 'mpesaipn',
+                            'post_author'  => 1,
+                        )
+                    );
+
+                    update_post_meta($post_id, '_customer', "{$FirstName} {$MiddleName} {$LastName}");
+                    update_post_meta($post_id, '_phone', $phone);
+                    update_post_meta($post_id, '_amount', $amount);
+                    update_post_meta($post_id, '_reference', $BillRefNumber);
+                    update_post_meta($post_id, '_receipt', $mpesaReceiptNumber);
+                    update_post_meta($post_id, '_order_status', 'processing');
+                }
+
+                $order_id        = get_post_meta($post, '_order_id', true);
+                $amount_due      = get_post_meta($post, '_amount', true);
+                $before_ipn_paid = get_post_meta($post, '_paid', true);
+
+                if (wc_get_order($order_id)) {
+                    $order    = new WC_Order($order_id);
+                    $customer = "{$FirstName} {$MiddleName} {$LastName}";
+                } else {
+                    $customer = "M-PESA Customer";
+                }
+
+                $after_ipn_paid = round($before_ipn_paid) + round($amount);
+                $ipn_balance    = $after_ipn_paid - $amount_due;
+
+                if (wc_get_order($order_id)) {
+                    $order = new WC_Order($order_id);
+
+                    if ($ipn_balance == 0) {
+                        $mpesa = new WC_Gateway_MPESA();
+                        $order->update_status('complete');
+                        $order->payment_complete();
+                        $order->add_order_note(__("Full M-PESA Payment Received From {$phone}. Receipt Number {$mpesaReceiptNumber}"));
+                        update_post_meta($post, '_order_status', 'complete');
+
+                        $headers = 'From: ' . get_bloginfo('name') . ' <' . get_bloginifo('admin_email') . '>' . "\r\n";
+                        wp_mail($order["billing_address"], 'Your Mpesa payment', 'We acknowledge receipt of your payment via M-PESA of KSh. ' . $amount . ' on ' . $transactionDate . 'with receipt Number ' . $mpesaReceiptNumber . '.', $headers);
+                    } elseif ($ipn_balance < 0) {
+                        $currency = get_woocommerce_currency();
+                        $order->payment_complete();
+                        $order->add_order_note(__("{$phone} has overpayed by {$currency} {$ipn_balance}. Receipt Number {$mpesaReceiptNumber}"));
+                        update_post_meta($post, '_order_status', 'complete');
+                    } else {
+                        $order->update_status('on-hold');
+                        $order->add_order_note(__("M-PESA Payment from {$phone} Incomplete"));
+                        update_post_meta($post, '_order_status', 'on-hold');
+                    }
+                }
+
+                update_post_meta($post, '_paid', $after_ipn_paid);
+                update_post_meta($post, '_amount', $amount_due);
+                update_post_meta($post, '_balance', $ipn_balance);
+                update_post_meta($post, '_phone', $phone);
+                update_post_meta($post, '_customer', $customer);
+                update_post_meta($post, '_order_id', $order_id);
+                update_post_meta($post, '_receipt', $mpesaReceiptNumber);
+
+                exit(wp_send_json(Osen\Mpesa\STK::confirm()));
+                break;
+
+            default:
+                exit(wp_send_json(['tests']));
         }
-        sort($b);
-
-        $base_string       = implode('&', $b);
-        $signature_created = base64_encode(hash_hmac("sha1", $base_string, $api_key, true));
-
-        // Get payment by reference and update details
-        $post_id = africastalking_post_id_by_meta_key_and_value('_reference', $transaction_reference);
-
-        if (!$post_id) {
-            $post_id = wp_insert_post(
-                array(
-                    'post_title'  => 'Order ' . time(),
-                    'post_status' => 'publish',
-                    'post_type'   => 'at_ipn',
-                    'post_author' => is_user_logged_in() ? get_current_user_id() : 1,
-                )
-            );
-
-            update_post_meta($post_id, '_reference', $transaction_reference);
-        }
-
-        update_post_meta($post_id, '_transaction', $internal_transaction_id);
-        update_post_meta($post_id, '_timestamp', $transaction_timestamp);
-        update_post_meta($post_id, '_receipt', $transaction_reference);
-        update_post_meta($post_id, '_account_number', $account_number);
-        update_post_meta($post_id, '_phone', $sender_phone);
-        update_post_meta($post_id, '_amount', $amount);
-
-        $order_id = empty(get_post_meta($post_id, '_order_id', true))
-        ? africastalking_post_id_by_meta_key_and_value('_mpesa_reference', $transaction_reference)
-        : get_post_meta($post_id, '_order_id', true);
-        $order = wc_get_order($order_id);
-
-        if ((int) $amount >= $order->get_total()) {
-            $order->add_order_note(__("FULLY PAID: Payment of $currency $amount from $first_name $middle_name $last_name, phone number $sender_phone and MPESA reference $transaction_reference confirmed by Africas Talking", 'woocommerce'));
-            //$order->payment_complete();
-            $order->update_status('completed');
-        } else {
-            $order->add_order_note(__("PARTLY PAID: Received $currency $amount from $first_name $middle_name $last_name, phone number $sender_phone and MPESA reference $transaction_reference", 'woocommerce'));
-            $order->update_status('processing');
-        }
-
-        $response = array(
-            "status"             => "01",
-            "description"        => "Reconciliation processed",
-            "subscriber_message" => "Payment of {$currency} {$amount} to " . get_bloginfo('name') . " received.",
-        );
-
-        // if ($signature_created == $signature) {
-        //     update_post_meta($post_id, '_transaction', $internal_transaction_id);
-        //     update_post_meta($post_id, '_timestamp', $transaction_timestamp);
-        //     update_post_meta($post_id, '_receipt', $transaction_reference);
-        //     update_post_meta($post_id, '_amount', $amount);
-        //     update_post_meta($post_id, '_customer', $first_name . ' ' . $middle_name . ' ' . $last_name);
-        //     update_post_meta($post_id, '_phone', $sender_phone);
-        //     update_post_meta($post_id, '_account_number', $account_number);
-
-        //     $order_id = get_post_meta($post_id, '_order_id', true);
-        //     $order    = wc_get_order($order_id);
-
-        //     if ($transaction_reference == get_post_meta($post_id, '_reference', true)) {
-        //         if ((int) $amount >= $order->get_total()) {
-        //             update_post_meta($post_id, '_order_status', 'complete');
-        //             $order->add_order_note(__("FULLY PAID: Payment of $currency $amount from $first_name $middle_name $last_name, phone number $sender_phone and MPESA reference $transaction_reference confirmed by Africas Talking", 'woocommerce'));
-        //             $order->payment_complete();
-        //             $order->update_status('completed');
-        //         } else {
-        //             $order->add_order_note(__("PARTLY PAID: Received $currency $amount from $first_name $middle_name $last_name, phone number $sender_phone and MPESA reference $transaction_reference", 'woocommerce'));
-        //             $order->update_status('processing');
-        //         }
-        //     }
-
-        //     $response = array(
-        //         "status"             => "01",
-        //         "description"        => "Reconciliation processed",
-        //         "subscriber_message" => "Payment of {$currency} {$amount} for Order #{$order_id} to " . get_bloginfo('name') . " received.",
-        //     );
-        // } else {
-        //     $response = array(
-        //         "status"             => "02",
-        //         "description"        => "Rejected",
-        //         "subscriber_message" => "Account not found",
-        //     );
-        // }
-
-        exit(wp_send_json($response));
     }
-});
-
-add_action('init', function () {
-    if (isset($_GET['atipncheck'])) {
-        $response = array('receipt' => '');
-        if (!empty($_GET['order'])) {
-            $post     = africastalking_post_id_by_meta_key_and_value('_order_id', $_GET['order']);
-            $response = array(
-                'receipt' => get_post_meta($post, '_receipt', true),
-            );
-        }
-
-        // $data = array(
-        //     "service_name" => "MPESA",
-        //     "business_number" => "892309",
-        //     "transaction_reference" => "NHUIODUSAA",
-        //     "internal_transaction_id" => 3222,
-        //     "transaction_timestamp" => "2019-04-21T13:57:00Z",
-        //     "transaction_type" => "Till",
-        //     "account_number" => "445534",
-        //     "sender_phone" => "0768904639",
-        //     "first_name" => "John",
-        //     "middle_name" => "K",
-        //     "last_name" => "Doe",
-        //     "amount" => 1,
-        //     "currency" => "KES"
-        // );
-        // ksort($data);
-
-        // $b = array();
-        // foreach ($data as $key => $value) {
-        // $b[] = $key . '=' . $value;
-        // }
-        // sort($b);
-
-        // $base_string       = implode('&', $b);
-        // echo base64_encode(hash_hmac("sha1", $base_string, '7bc21e95a0bab4e2f4765bc84bc2b1a050943691', true));
-
-        exit(wp_send_json($response));
-    }
-});
+}

@@ -1,11 +1,11 @@
-<?php 
+<?php
 function at_option($key, $default = '')
 {
     if (in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
-        $at = new WC_Africas_Talking_Gateway();
+        $at    = new WC_Africas_Talking_Gateway();
         $value = $at->get_option($key, $default);
     } else {
-        $value = get_option('at_api_'.$key);
+        $value = get_option('at_mpesa_options')[$key];
     }
 
     return $value;
@@ -24,4 +24,35 @@ function africastalking_post_id_by_meta_key_and_value($key, $value)
     } else {
         return false;
     }
+}
+
+function at_wallet_balance()
+{
+    $username = at_option('username');
+    $apiKey   = at_option('key');
+    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+    $url      = ($username == 'sandbox') 
+    ? 'https://payments.sandbox.africastalking.com/query/wallet/balance' 
+    : 'https://payments.africastalking.com/query/wallet/balance';
+    $url = "{$url}?username={$username}";
+
+    $response = wp_remote_get(
+        $url,
+        array(
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+                'apiKey'       => $apiKey,
+            ),
+        )
+    );
+
+    if (is_wp_error($response)) {
+        $balance    = 'Could not connect to AT';
+    } else {
+        $response   = json_decode($response['body'], true);
+        $balance    = isset($response['balance']) ? $response['balance'] : $response['status'];
+    }
+
+    return $balance;
 }

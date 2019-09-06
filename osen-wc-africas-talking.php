@@ -2,12 +2,12 @@
 /**
  * @package Africas Talking
  * @subpackage Plugin File
- * @author Mauko Maunde < hi@mauko.co.ke >
+ * @author Osen Concepts < hi@osen.co.ke >
  * @since 0.19.08
  *
- * Plugin Name: Africas Talking
+ * Plugin Name: Africas Talking for WordPress
  * Plugin URI:  https://africastalking.org
- * Description: This plugin extends WordPress and WooCommerce functionality to integrate Lipa Na M-PESA by Africas Talking for making and receiving online payments.
+ * Description: This plugin extends WordPress and WooCommerce functionality to integrate Lipa Na Africa\'s Talking C2B by Africas Talking for making and receiving online payments.
  * Version:     0.19.09
  * Author:      Osen Concepts
  * Author URI:  https://osen.co.ke/
@@ -31,7 +31,7 @@ if (!defined('AT_PLUGIN_FILE')) {
     define('AT_PLUGIN_FILE', __FILE__);
 }
 
-require_once plugin_dir_path(__FILE__).'vendor/autoload.php';
+require_once plugin_dir_path(__FILE__) . 'vendor/autoload.php';
 
 // Deactivate plugin if WooCommerce is not active
 register_activation_hook(__FILE__, 'wc_africastalking_activation_check');
@@ -57,6 +57,8 @@ function wc_africastalking_detect_plugin_activation($plugin, $network_activation
 {
     if (in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins'))) && $plugin == 'osen-wc-africastalking/osen-wc-africastalking.php') {
         exit(wp_redirect(admin_url('admin.php?page=wc-settings&tab=checkout&section=africastalking')));
+    } else {
+        exit(wp_redirect(admin_url('admin.php?page=africastalking_options')));
     }
 }
 
@@ -137,14 +139,14 @@ function africastalking_init()
         {
             // global ID
             $this->id                 = "africastalking";
-            $this->method_title       = __("Lipa Na M-PESA via Africas Talking", 'woocommerce');
+            $this->method_title       = __("Africa's Talking C2B", 'woocommerce');
             $this->method_description = ($this->get_option('enabled') == 'yes')
-            ? 'Receive payments using your shortcode through Africa\'s Talking.'
-            : __('<p>Log into your <a href="https://app.africastalking.com" target="_blank">Africas Talking Account</a> and configure as follows:</p>
+            ? 'Receive payments through Africa\'s Talking.'
+            : __('<p>Log into your <a href="https://account.africastalking.com" target="_blank">Africas Talking Account</a> and copy your API key here.:</p>
 			<p>Remember to <a title="' . __('Navigate to page and click Save Changes', 'woocommerce') . '" href="' . admin_url('options-permalink.php') . '">flush your rewrite rules</a>.</p>', 'woocommerce');
 
             // vertical tab title
-            $this->title = __("Lipa Na M-PESA", 'woocommerce');
+            $this->title = __("Lipa Na Africa\'s Talking C2B", 'woocommerce');
 
             // Add Gateway Icon
             $this->icon = apply_filters('woocommerce_mpesa_icon', plugins_url('inc/Africas Talking.png', __FILE__));
@@ -191,13 +193,13 @@ function africastalking_init()
                     'title'    => __('Method Title', 'woocommerce'),
                     'type'     => 'text',
                     'desc_tip' => __('Payment title of checkout process.', 'woocommerce'),
-                    'default'  => __('Lipa Na M-PESA', 'woocommerce'),
+                    'default'  => __('Africa\'s Talking C2B', 'woocommerce'),
                 ),
                 'shortcode'          => array(
                     'title'    => __('AT Shortcode', 'woocommerce'),
                     'type'     => 'text',
                     'desc_tip' => __('This is the Till number provided by Africas Talking when you signed up for an account.', 'woocommerce'),
-                    'default'  => '',
+                    'default'  => 'AT2FA',
                 ),
                 'username'           => array(
                     'title'       => __('AT Username', 'woocommerce'),
@@ -210,27 +212,21 @@ function africastalking_init()
                     'title'       => __('AT API Key', 'woocommerce'),
                     'type'        => 'text',
                     'description' => __('Your App Consumer Key From Safaricom Daraja.', 'woocommerce'),
-                    'default'     => __('9v38Dtu5u2BpsITPmLcXNWGMsjZRWSTG', 'woocommerce'),
+                    'default'     => __('0be438d7976ba7613238370ea8f84e3eaa93b23e59cb0d132a1aa72260bfc795', 'woocommerce'),
                     'desc_tip'    => true,
                 ),
-                'enable_for_methods' => array(
-                    'title'             => __('Enable for shipping methods', 'woocommerce'),
-                    'type'              => 'multiselect',
-                    'class'             => 'wc-enhanced-select',
-                    'css'               => 'width: 400px;',
-                    'default'           => '',
-                    'description'       => __('If M-PESA is only available for certain methods, set it up here. Leave blank to enable for all methods.', 'woocommerce'),
-                    'options'           => $shipping_methods,
-                    'desc_tip'          => true,
-                    'custom_attributes' => array(
-                        'data-placeholder' => __('Select shipping methods', 'woocommerce'),
-                    ),
-                ),
-                'enable_for_virtual' => array(
-                    'title'   => __('Accept for virtual orders', 'woocommerce'),
-                    'label'   => __('Accept Lipa na M-PESA if the order is virtual', 'woocommerce'),
-                    'type'    => 'checkbox',
-                    'default' => 'yes',
+                'description'        => array(
+                    'title'       => __('Method Description', 'woocommerce'),
+                    'type'        => 'textarea',
+                    'css'         => 'height: 140px',
+                    'description' => __('Payment method description that the customer will see on your checkout.', 'woocommerce'),
+                    'default'     => __('Confirm your phone number above before pressing the button below.
+Your phone number MUST be registered with M-PESA for this to work.
+You will get a prompt on your phone asking you to confirm the payment.
+Enter your service (M-PESA) PIN to proceed.
+If you don\'t see the pop up, please upgrade your SIM card by dialing *234*1*6#.
+You will receive a confirmation message shortly thereafter.', 'woocommerce'),
+                    'desc_tip'    => true,
                 ),
                 'instructions'       => array(
                     'title'       => __('Thank You Instructions', 'woocommerce'),
@@ -239,27 +235,45 @@ function africastalking_init()
                     'default'     => __('Thank you for buying from us. You will receive a confirmation message from us shortly.', 'woocommerce'),
                     'desc_tip'    => true,
                 ),
+                'enable_for_methods' => array(
+                    'title'             => __('Enable for shipping methods', 'woocommerce'),
+                    'type'              => 'multiselect',
+                    'class'             => 'wc-enhanced-select',
+                    'css'               => 'width: 400px;',
+                    'default'           => '',
+                    'description'       => __('If Africa\'s Talking C2B is only available for certain methods, set it up here. Leave blank to enable for all methods.', 'woocommerce'),
+                    'options'           => $shipping_methods,
+                    'desc_tip'          => true,
+                    'custom_attributes' => array(
+                        'data-placeholder' => __('Select shipping methods', 'woocommerce'),
+                    ),
+                ),
+                'enable_for_virtual' => array(
+                    'title'   => __('Accept for virtual orders', 'woocommerce'),
+                    'label'   => __('Accept Africa\'s Talking C2B if the order is virtual', 'woocommerce'),
+                    'type'    => 'checkbox',
+                    'default' => 'yes',
+                ),
             );
         }
 
         // Response handled for payment gateway
         public function process_payment($order_id)
         {
-            $username = $this->get_option('username');
-            $apiKey   = $this->get_option('key');
-            $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+            $username   = $this->get_option('username');
+            $apiKey     = $this->get_option('key');
+            $AT         = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
 
-            $currency = get_woocommerce_currency_symbol();
-            $order = new WC_Order($order_id);
-
+            $currency   = get_woocommerce_currency_symbol();
+            $order      = new WC_Order($order_id);
             $total      = $order->get_total();
             $phone      = $order->get_billing_phone();
             $first_name = $order->get_billing_first_name();
             $last_name  = $order->get_billing_last_name();
             $reference  = 'ORDER#' . $order_id;
-            
-            $payments = $AT->payments();
-            $result = $payments->mobileCheckout(
+
+            $payments   = $AT->payments();
+            $result     = $payments->mobileCheckout(
                 array(
                     "productName"  => $reference,
                     "phoneNumber"  => $phone,
@@ -270,7 +284,7 @@ function africastalking_init()
 
             if ($result) {
                 if ($result['status'] == 'error') {
-                    $error_message = 'M-PESA Error ' . $result['data'] . ': ' . $result['data'];
+                    $error_message = 'Africa\'s Talking C2B Error ' . $result['data'] . ': ' . $result['data'];
                     $order->update_status('failed', __($error_message, 'woocommerce'));
                     wc_add_notice(__('Failed! ', 'woocommerce') . $error_message, 'error');
                     return array(
@@ -279,9 +293,9 @@ function africastalking_init()
                     );
                 } else {
                     /**
-                     * Temporarily set status as "on-hold", incase the M-PESA API times out before processing our request
+                     * Temporarily set status as "on-hold", incase the Africa\'s Talking C2B API times out before processing our request
                      */
-                    $order->update_status('on-hold', __('Awaiting M-PESA confirmation of payment from ' . $phone . '.', 'woocommerce'));
+                    $order->update_status('on-hold', __('Awaiting Africa\'s Talking confirmation of payment from ' . $phone . '.', 'woocommerce'));
 
                     /**
                      * Reduce stock levels
@@ -312,7 +326,7 @@ function africastalking_init()
                     update_post_meta($post_id, '_receipt', 'N/A');
                     update_post_meta($post_id, '_order_status', 'on-hold');
 
-                    $this->instructions .= '<p>Awaiting M-PESA confirmation of payment from ' . $phone . ' for request ' . $request_id . '. Check your phone for the STK Prompt.</p>';
+                    $this->instructions .= '<p>Awaiting Africa\'s Talking confirmation of payment from ' . $phone . ' for request ' . $request_id . '. Check your phone for the STK Prompt.</p>';
 
                     // Return thankyou redirect
                     return array(

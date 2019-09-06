@@ -1,6 +1,5 @@
 <?php
 require_once plugin_dir_path(__DIR__) . 'vendor/autoload.php';
-use AfricasTalking\SDK\AfricasTalking;
 
 add_action('woocommerce_order_status_pending_to_processing_notification', 'iconic_processing_notification', 10, 1);
 function iconic_processing_notification($order_id)
@@ -15,7 +14,7 @@ function iconic_processing_notification($order_id)
 
     $username = at_option('username');
     $apiKey   = at_option('key');
-    $AT       = new AfricasTalking($username, $apiKey);
+    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
     $sms      = $AT->sms();
 
     $recipients = $order->get_billing_phone();

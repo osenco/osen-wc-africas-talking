@@ -1,8 +1,8 @@
 <?php
 /**
- * @package Africas Talking For WooCommerce
- * @subpackage Payments CPT
- * @author Mauko Maunde < hi@mauko.co.ke >
+ * @package Africas Talking For WordPress
+ * @subpackage Transactions CPT
+ * @author Osen Concepts < hi@osen.co.ke >
  * @since 0.19.04
  */
 
@@ -11,14 +11,14 @@ add_action('init', 'africastalking_custom_post_type', 0);
 function africastalking_custom_post_type()
 {
     $labels = array(
-        'name'                  => _x('Africa\'s Talking Payments', 'Post Type General Name', 'africastalking'),
-        'singular_name'         => _x('Payment', 'Post Type Singular Name', 'africastalking'),
+        'name'                  => _x('Africa\'s Talking Transactions', 'Post Type General Name', 'africastalking'),
+        'singular_name'         => _x('Transaction', 'Post Type Singular Name', 'africastalking'),
         'menu_name'             => __('Africa\'s Talking', 'africastalking'),
         'name_admin_bar'        => __('Africa\'s Talking IPN', 'africastalking'),
         'archives'              => __('Item Archives', 'africastalking'),
         'attributes'            => __('Item Attributes', 'africastalking'),
         'parent_item_colon'     => __('Parent Item:', 'africastalking'),
-        'all_items'             => __('Payments', 'africastalking'),
+        'all_items'             => __('Transactions', 'africastalking'),
         'add_new_item'          => __('Add New Item', 'africastalking'),
         'add_new'               => __('Add New', 'africastalking'),
         'new_item'              => __('New Item', 'africastalking'),
@@ -41,8 +41,8 @@ function africastalking_custom_post_type()
     );
 
     $args = array(
-        'label'               => __('Payment', 'africastalking'),
-        'description'         => __('Africas Talking Payments IPN', 'africastalking'),
+        'label'               => __('Transaction', 'africastalking'),
+        'description'         => __('Africas Talking Transactions IPN', 'africastalking'),
         'labels'              => $labels,
         'supports'            => array(),
         'hierarchical'        => false,
