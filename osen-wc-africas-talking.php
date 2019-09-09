@@ -139,7 +139,7 @@ function africastalking_init()
         {
             // global ID
             $this->id                 = "africastalking";
-            $this->method_title       = __("Africa's Talking C2B", 'woocommerce');
+            $this->method_title       = __("Africa's Talking", 'woocommerce');
             $this->method_description = ($this->get_option('enabled') == 'yes')
             ? 'Receive payments through Africa\'s Talking.'
             : __('<p>Log into your <a href="https://account.africastalking.com" target="_blank">Africas Talking Account</a> and copy your API key here.:</p>
@@ -196,9 +196,9 @@ function africastalking_init()
                     'default'  => __('Africa\'s Talking C2B', 'woocommerce'),
                 ),
                 'shortcode'          => array(
-                    'title'    => __('AT Shortcode', 'woocommerce'),
+                    'title'    => __('SMS Sender ID', 'woocommerce'),
                     'type'     => 'text',
-                    'desc_tip' => __('This is the Till number provided by Africas Talking when you signed up for an account.', 'woocommerce'),
+                    'desc_tip' => __('This is your Africa\'s Talking Sender ID.', 'woocommerce'),
                     'default'  => 'AT2FA',
                 ),
                 'username'           => array(
@@ -327,6 +327,27 @@ You will receive a confirmation message shortly thereafter.', 'woocommerce'),
                     update_post_meta($post_id, '_order_status', 'on-hold');
 
                     $this->instructions .= '<p>Awaiting Africa\'s Talking confirmation of payment from ' . $phone . ' for request ' . $request_id . '. Check your phone for the STK Prompt.</p>';
+
+                    $order      = wc_get_order($order_id);
+
+                    $sms      = $AT->sms();
+
+                    $message    = "Hi {$first_name} {$last_name}, your order {$reference} of KSh {$total} has been received and being processed.";
+                    $from       = at_option('shortcode');
+
+                    try {
+                        // Thats it, hit send and we'll take care of the rest
+                        $result = $sms->send([
+                            'to'      => $phone,
+                            'message' => $message,
+                            'from'    => at_option('shortcode'),
+                        ]);
+                    } catch (Exception $e) {
+                        $result = [
+                            'status' => 'error',
+                            'data'   => $e->getMessage(),
+                        ];
+                    }
 
                     // Return thankyou redirect
                     return array(

@@ -17,7 +17,7 @@ function at_settings_init() {
     
     add_settings_field(
         'shortcode',
-        __( 'AT Shortcode', 'africastalking_options' ),
+        __( 'SMS Sender ID', 'africastalking_options' ),
         'at_fields_at_mpesa_shortcode_cb',
         'africastalking_options',
         'at_section_mpesa',

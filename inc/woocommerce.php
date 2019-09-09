@@ -1,8 +1,8 @@
 <?php
 require_once plugin_dir_path(__DIR__) . 'vendor/autoload.php';
 
-add_action('woocommerce_order_status_pending_to_processing_notification', 'iconic_processing_notification', 10, 1);
-function iconic_processing_notification($order_id)
+add_action('woocommerce_order_status_pending_to_processing_notificaton', 'at_processing_notificaton', 10, 1);
+function at_processing_notificaton($order_id)
 {
 
     $order      = wc_get_order($order_id);
@@ -18,15 +18,15 @@ function iconic_processing_notification($order_id)
     $sms      = $AT->sms();
 
     $recipients = $order->get_billing_phone();
-    $message    = "Hi {$first_name} {$last_name}, your order {$reference} of KSh {$total} has been received and being processed.";
-    $from       = "myShortCode";
+    $message    = "Hi {$first_name} {$last_name}, your order {$reference} of KSh {$total} has been received and is being processed.";
+    $from       = at_option('shortcode');
 
     try {
         // Thats it, hit send and we'll take care of the rest
         $result = $sms->send([
             'to'      => $recipients,
             'message' => $message,
-            'from'    => $from,
+            'from'    => at_option('shortcode'),
         ]);
     } catch (Exception $e) {
         $result = [
@@ -38,8 +38,8 @@ function iconic_processing_notification($order_id)
     return $result;
 }
 
-add_action('woocommerce_thankyou_africastalking', 'wc_ati_add_content_thankyou_africastalking');
-function wc_ati_add_content_thankyou_africastalking($order_id)
+add_action('woocommerce_thankyou_africastalking', 'wc_at_add_content_thankyou_africastalking');
+function wc_at_add_content_thankyou_africastalking($order_id)
 {
     $order = wc_get_order($order_id);
 
@@ -73,16 +73,16 @@ function wc_ati_add_content_thankyou_africastalking($order_id)
 		}
 
 		.saving span {
-			animation: blink 1.4s linear infinite;
-			animation-fill-mode: both;
+			animaton: blink 1.4s linear infinite;
+			animaton-fill-mode: both;
 		}
 
 		.saving span:nth-child(2) {
-			animation-delay: .2s;
+			animaton-delay: .2s;
 		}
 
 		.saving span:nth-child(3) {
-			animation-delay: .4s;
+			animaton-delay: .4s;
 		}
 	</style>
 	<section class="woocommerce-order-details africastalking">
@@ -92,26 +92,26 @@ function wc_ati_add_content_thankyou_africastalking($order_id)
 	</section><?php
 }
 
-add_action('wp_footer', 'ati_ajax_polling');
-function ati_ajax_polling()
+add_action('wp_footer', 'at_ajax_polling');
+function at_ajax_polling()
 {?>
-	<script id="atipn_atichecker">
-		var atichecker = setInterval(() => {
+	<script id="atpn_atchecker">
+		var atchecker = setInterval(() => {
 			if (document.getElementById("payment_method") !== null && document.getElementById("payment_method").value !== 'africastalking') {
-				clearInterval(atichecker);
+				clearInterval(atchecker);
 			}
 
 			jQuery(function($) {
 				var order = $("#current_order").val();
 				if (order !== undefined || order !== '') {
-					$.get('<?php echo home_url('?atipncheck&order='); ?>' + order, [], function(data) {
+					$.get('<?php echo home_url('?atpncheck&order='); ?>' + order, [], function(data) {
 						if (data.receipt == '' || data.receipt == 'N/A') {
 							$("#africastalking_receipt").html('Confirming payment <span>.</span><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span>');
 						} else {
 							$(".woocommerce-order-overview").append('<li class="woocommerce-order-overview__payment-method method">Receipt number: <strong>' + data.receipt + '</strong></li>');
 							$(".woocommerce-table--order-details > tfoot").find('tr:last-child').prev().after('<tr><th scope="row">Receipt number:</th><td>' + data.receipt +'</td></tr>');
 							$("#africastalking_receipt").html('Payment confirmed. Receipt number: <b>' + data.receipt + '</b>');
-							clearInterval(atichecker);
+							clearInterval(atchecker);
 							return false;
 						}
 					})

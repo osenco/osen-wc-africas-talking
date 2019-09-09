@@ -120,7 +120,6 @@ function at_apis_render_page()
             $sms        = $AT->sms();
             $recipients = strip_tags(trim($_POST['sms_phone']));
             $message    = strip_tags(trim($_POST['sms_message']));
-            $from       = "AT2FA";
 
             $phones     = array();
             if (strpos(',', $recipients) !== false) {
@@ -134,11 +133,11 @@ function at_apis_render_page()
                 $result = $sms->send([
                     'to'      => $phones,
                     'message' => $message,
-                    'from'    => $from,
+                    'from'    => at_option('shortcode'),
                 ]);
 
                 echo '<div class="notice notice-'.$result['status'].' is-dismissible">
-                    <p>'.json_encode($result['data']).'.</p>
+                    <p>'.$result['data']->SMSMessageData->Message.'.</p>
                 </div>';
             } catch (Exception $e) {
                 echo '<div class="notice notice-error is-dismissible">
@@ -157,7 +156,7 @@ function at_apis_render_page()
                     </th>
                     <td>
                         <input class="regular-text" type="tel" id="at_shortcode" name="sms_phone" value="+254"/>
-                        <br><small>Separate multiple phone numbers with comma</small>
+                        <br><small>Separate multiple phone numbers with commas</small>
                     </td>
                 </tr>
                 <tr valign="top">
@@ -238,7 +237,7 @@ function at_apis_render_page()
                     </th>
                     <td>
                         <input class="regular-text" type="tel" id="at_shortcode" name="b2c_phone" value="+254"/>
-                        <br><small>Separate multiple phone numbers with comma</small>
+                        <br><small>Separate multiple phone numbers with commas</small>
                     </td>
                 </tr>
                 <tr valign="top">

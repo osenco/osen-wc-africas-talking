@@ -103,6 +103,32 @@ function at_process_ipn()
 
                         $headers = 'From: ' . get_bloginfo('name') . ' <' . get_bloginifo('admin_email') . '>' . "\r\n";
                         wp_mail($order["billing_address"], 'Your Mpesa payment', 'We acknowledge receipt of your payment via M-PESA of KSh. ' . $amount . ' on ' . $transactionDate . 'with receipt Number ' . $mpesaReceiptNumber . '.', $headers);
+
+                        $total      = round($order->get_total());
+                        $reference  = 'ORDER#' . $order_id;
+
+                        $username = at_option('username');
+                        $apiKey   = at_option('key');
+                        $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+                        $sms      = $AT->sms();
+
+                        $recipients = $order->get_billing_phone();
+                        $message    = "We acknowledge receipt of your payment via M-PESA of KSh. {$amount} on {$transactionDate} for {$reference} with receipt number {$mpesaReceiptNumber}";
+                        $from       = at_option('shortcode');
+
+                        try {
+                            // Thats it, hit send and we'll take care of the rest
+                            $result = $sms->send([
+                                'to'      => $recipients,
+                                'message' => $message,
+                                'from'    => at_option('shortcode'),
+                            ]);
+                        } catch (Exception $e) {
+                            $result = [
+                                'status' => 'error',
+                                'data'   => $e->getMessage(),
+                            ];
+                        }
                     } elseif ($ipn_balance < 0) {
                         $currency = get_woocommerce_currency();
                         $order->payment_complete();
@@ -123,7 +149,7 @@ function at_process_ipn()
                 update_post_meta($post, '_order_id', $order_id);
                 update_post_meta($post, '_receipt', $mpesaReceiptNumber);
 
-                exit(wp_send_json(Osen\Mpesa\STK::confirm()));
+                exit(wp_send_json(['tests']));
                 break;
 
             default:
