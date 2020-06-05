@@ -106,18 +106,13 @@ function at_apis_tab()
 add_action('at_settings_content', 'at_apis_render_page');
 function at_apis_render_page()
 {
-    $username = at_option('username');
-    $apiKey   = at_option('key');
-    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
-    
-    global $at_active_tab;
+   global $at_active_tab;
     if ('' || 'apis' == $at_active_tab) { ?>
         <h3><?php _e('Welcome', 'woocommerce');?></h3>
         <p>Explore the AT APIs available for use, for your convenience.</p>
         <!-- Put your content here --><?php 
     } elseif ('sms' == $at_active_tab) {
         if (isset($_POST['sms_phone'])) {
-            $sms        = $AT->sms();
             $recipients = strip_tags(trim($_POST['sms_phone']));
             $message    = strip_tags(trim($_POST['sms_message']));
 
@@ -130,11 +125,7 @@ function at_apis_render_page()
 
             try {
                 // Thats it, hit send and we'll take care of the rest
-                $result = $sms->send([
-                    'to'      => $phones,
-                    'message' => $message,
-                    'from'    => at_option('shortcode'),
-                ]);
+                $result = at_sms($phones, $message);
 
                 echo '<div class="notice notice-'.$result['status'].' is-dismissible">
                     <p>'.$result['data']->SMSMessageData->Message.'.</p>
