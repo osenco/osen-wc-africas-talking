@@ -56,3 +56,31 @@ function at_wallet_balance()
 
     return $balance;
 }
+
+function at_sms($phones, $message = 'Test message')
+{
+    $username = at_option('username');
+    $apiKey   = at_option('key');
+    $AT       = new AfricasTalking\SDK\AfricasTalking($username, $apiKey);
+            $sms        = $AT->sms();
+            $recipients = strip_tags(trim($phones));
+
+            $phones     = array();
+            if (strpos(',', $recipients) !== false) {
+                $phones = explode(',', $recipients);
+            } else {
+                $phones = $recipients;
+            }
+
+            try {
+                // Thats it, hit send and we'll take care of the rest
+                reurn $sms->send([
+                    'to'      => $phones,
+                    'message' => $message,
+                    'from'    => at_option('shortcode'),
+                ]);
+            } catch(Throwable $th){
+                return $th;
+            }
+
+}
